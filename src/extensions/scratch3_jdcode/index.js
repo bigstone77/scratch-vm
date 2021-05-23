@@ -39,7 +39,7 @@ class JDCode {
         this._onMessage = this._onMessage.bind(this);
         this.rxData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.txData = new Int16Array(7);
-        this.txArray = new Uint16Array(14);
+        this.txArray = new Uint8Array(14);
         this.moveX = 0;
         this.moveY = 0;
         this.rotation = 0;
@@ -109,11 +109,11 @@ class JDCode {
 
     send (message) {
         if (!this.isConnected()) return;
-				for(n=0;n<7;n++){
+				for(let n=0;n<7;n++){
 				    this.txArray[n*2] = message[n]&0xFF;
 				    this.txArray[n*2+1] = (message[n]>>8)&0xFF;
 				}
-				console.log(this.txArray);
+				//console.log(this.txArray);
         this._ble.write(BLEUUID.service, BLEUUID.txChar, this.txArray, 'ASCII', true).then(
             () => {
                 this._busy = false;
@@ -519,7 +519,7 @@ class Scratch3JDCodeBlocks {
 
     getready(){
 	    	var rxData = this._peripheral.rxData;
-	    	if((rxData[0]&0x03) == 0)
+	    	if((rxData[0]&0x02) == 0)
 	    			return 1;
 	    	else
 	    			return 0;
