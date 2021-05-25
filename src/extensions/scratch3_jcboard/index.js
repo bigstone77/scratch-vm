@@ -37,8 +37,12 @@ class JCBoard {
         this.reset = this.reset.bind(this);
         this._onConnect = this._onConnect.bind(this);
         this._onMessage = this._onMessage.bind(this);
+ 				this._pollValues = this._pollValues.bind(this);       
         this.rxData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.txData = new Uint8Array(20);
+        this._pollingIntervalID = null;
+        this._pollingInterval = 25;
+        this.tuneDuration = 0;
         this._sensors = {
             button: 0,
             ir: [0, 0, 0],
@@ -53,7 +57,6 @@ class JCBoard {
 		stopAll () {
 			for (let i = 0; i < 20; i++)
 					this.txData[i] = 0;
-			this.send(this.txData);
 		}
 		
     scan () {
@@ -99,7 +102,7 @@ class JCBoard {
     send (message) {
         if (!this.isConnected()) return;
 
-				console.log(message);
+				//console.log(message);
         this._ble.write(BLEUUID.service, BLEUUID.txChar, message, 'ASCII', true).then(
             () => {
                 this._busy = false;
@@ -109,12 +112,32 @@ class JCBoard {
     }
 
     _onConnect () {
+    		this._pollingIntervalID = window.setInterval(this._pollValues, this._pollingInterval);
         this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage);
         this._timeoutID = window.setTimeout(
             () => this._ble.handleDisconnectError(BLEDataStoppedError),
             BLETimeout
         );
     }
+    
+    _pollValues () {
+    		if (!this.isConnected()) {
+            window.clearInterval(this._pollingIntervalID);
+            return;
+        }
+        if(this.tuneDuration > 0){
+        		this.tuneDuration -= 1;
+        		if(this.tuneDuration == 0)
+        				this.txData[2] = this.txData[3] = 0;
+        }
+				//console.log(this.txData);
+        this._ble.write(BLEUUID.service, BLEUUID.txChar, this.txData, 'ASCII', true).then(
+            () => {
+                this._busy = false;
+                window.clearTimeout(this._busyTimeoutID);
+            }
+        );
+     }
 
     _onMessage (strData) {
       	this.rxData = strData.split(',');
@@ -229,8 +252,8 @@ class Scratch3JCBoardBlocks {
                             defaultValue: '1\uBC88'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -248,8 +271,8 @@ class Scratch3JCBoardBlocks {
                             defaultValue: '1\uBC88'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -352,12 +375,6 @@ class Scratch3JCBoardBlocks {
 						else
 								this.message[0] &= ~0x02;
 				}
-		    this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     digitalpin(args){
     		if(args.HIGHLOW == 'HIGH'){
@@ -374,16 +391,9 @@ class Scratch3JCBoardBlocks {
     			if(args.ONEFIVE == '4\uBC88') this.message[1] &= ~0x08;
     			if(args.ONEFIVE == '5\uBC88') this.message[1] &= ~0x10;
     		}
-    		
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     buzzer(args){
-    		this.tuneID = (this.tuneID+1)%16;
+    		this.tuneID = this.tuneID>14? 1 : this.tuneID+1;
     		if(args.TUNE == '\uB3C4') this.message[2] = 1;
     		if(args.TUNE == '\uB808') this.message[2] = 2;
     		if(args.TUNE == '\uBBF8') this.message[2] = 3;
@@ -400,55 +410,30 @@ class Scratch3JCBoardBlocks {
     		if(args.DELAY == '3') this.message[3] = 30;
     		if(args.DELAY == '4') this.message[3] = 40;
     		if(args.DELAY == '5') this.message[3] = 50;
-    		
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    		this._peripheral.tuneDuration = this.message[3];
     }
     
     motor (args){
+    		var speed = args.TEXT>100? 100 : args.Text<-100? -100 : Number(args.TEXT);
     		if(args.ONETWO == '1\uBC88')
-    				this.message[4] = args.TEXT;
+    				this.message[4] = speed;
     		else
-    				this.message[5] = args.TEXT;
-    	
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    				this.message[5] = speed;
     }
     
     servo (args){
-    		if(args.ONEFOUR == '1\uBC88') this.message[6] = args.TEXT;
-    		if(args.ONEFOUR == '2\uBC88') this.message[7] = args.TEXT;
-    		if(args.ONEFOUR == '3\uBC88') this.message[8] = args.TEXT;
-    		if(args.ONEFOUR == '4\uBC88') this.message[9] = args.TEXT;
-    	
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    		var degree = args.TEXT>90? 90 : args.Text<-90? -90 : Number(args.TEXT);
+    		if(args.ONEFOUR == '1\uBC88') this.message[6] = degree;
+    		if(args.ONEFOUR == '2\uBC88') this.message[7] = degree;
+    		if(args.ONEFOUR == '3\uBC88') this.message[8] = degree;
+    		if(args.ONEFOUR == '4\uBC88') this.message[9] = degree;
     }
     ultrasonic (args) {
 				if(args.ONEFIVE == '1\uBC88') this.message[10] = 0x01;
 				if(args.ONEFIVE == '2\uBC88') this.message[10] = 0x02;
 				if(args.ONEFIVE == '3\uBC88') this.message[10] = 0x04;								
 				if(args.ONEFIVE == '4\uBC88') this.message[10] = 0x08;
-				if(args.ONEFIVE == '5\uBC88') this.message[10] = 0x10;	
-				
-				this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });			
+				if(args.ONEFIVE == '5\uBC88') this.message[10] = 0x10;				
     }
     
     getbutton(args){

@@ -13,7 +13,7 @@ const blockIconURI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAMA
 
 
 const BLETimeout = 4500;
-const BLESendInterval = 20;
+const BLESendInterval = 10;
 const BLEDataStoppedError = 'UglyBot extension stopped receiving data';
 
 
@@ -37,8 +37,12 @@ class UglyBot {
         this.reset = this.reset.bind(this);
         this._onConnect = this._onConnect.bind(this);
         this._onMessage = this._onMessage.bind(this);
-        this.rxData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this._pollValues = this._pollValues.bind(this);
+        this.rxData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.txData = new Uint8Array(12);
+        this._pollingIntervalID = null;
+        this._pollingInterval = 25;
+        this.Cnt = 0;
         this._sensors = {
             button: 0,
             ir: [0, 0, 0],
@@ -53,7 +57,7 @@ class UglyBot {
 		stopAll () {
 			for (let i = 0; i < 12; i++)
 					this.txData[i] = 0;
-			this.send(this.txData);
+			this.Cnt = 0;
 		}
 		
     scan () {
@@ -99,7 +103,7 @@ class UglyBot {
     send (message) {
         if (!this.isConnected()) return;
 
-				//console.log(message);
+				console.log(message);
         this._ble.write(BLEUUID.service, BLEUUID.txChar, message, 'ASCII', true).then(
             () => {
                 this._busy = false;
@@ -109,12 +113,26 @@ class UglyBot {
     }
 
     _onConnect () {
+    		this._pollingIntervalID = window.setInterval(this._pollValues, this._pollingInterval);
         this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage);
         this._timeoutID = window.setTimeout(
             () => this._ble.handleDisconnectError(BLEDataStoppedError),
             BLETimeout
         );
     }
+    
+    _pollValues () {
+    		if (!this.isConnected()) {
+            window.clearInterval(this._pollingIntervalID);
+            return;
+        }
+        this._ble.write(BLEUUID.service, BLEUUID.txChar, this.txData, 'ASCII', true).then(
+            () => {
+                this._busy = false;
+                window.clearTimeout(this._busyTimeoutID);
+            }
+        );
+     }
 
     _onMessage (strData) {
       	this.rxData = strData.split(',');
@@ -123,6 +141,7 @@ class UglyBot {
             () => this._ble.handleDisconnectError(BLEDataStoppedError),
             BLETimeout
         );
+        
     }
     
     get getRxData() {
@@ -143,7 +162,6 @@ class Scratch3UglyBotBlocks {
     }
 
     constructor (runtime) {
-
         this.runtime = runtime;
         this._peripheral = new UglyBot(this.runtime, Scratch3UglyBotBlocks.EXTENSION_ID);
         this.message = this._peripheral.txData;
@@ -214,8 +232,8 @@ class Scratch3UglyBotBlocks {
                             defaultValue: '\uC624\uB978\uCABD'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -234,8 +252,8 @@ class Scratch3UglyBotBlocks {
                             defaultValue: '\uC55E'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -254,8 +272,8 @@ class Scratch3UglyBotBlocks {
                             defaultValue: '\uC2DC\uACC4\uBC29\uD5A5'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -274,8 +292,8 @@ class Scratch3UglyBotBlocks {
                             defaultValue: '1\uBC88'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -433,16 +451,10 @@ class Scratch3UglyBotBlocks {
 						else
 								this.message[0] &= ~0x02;
 				}
-		    this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     buzzer(args){
-    		this.tuneID = (this.tuneID+1)%16;
+    		this.tuneID = (this.tuneID<14)? this.tuneID+1 : 1;
     		if(args.TUNE == '\uB3C4') this.message[1] = 1;
     		if(args.TUNE == '\uB808') this.message[1] = 2;
     		if(args.TUNE == '\uBBF8') this.message[1] = 3;
@@ -459,81 +471,51 @@ class Scratch3UglyBotBlocks {
     		if(args.DELAY == '3') this.message[2] = 30;
     		if(args.DELAY == '4') this.message[2] = 40;
     		if(args.DELAY == '5') this.message[2] = 50;
-    		
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     motor (args){
+    		var value = Number(args.TEXT);
+    		value = value>100?100 : value<-100? -100 : value;
     		if(args.RIGHTLEFT == '\uC624\uB978\uCABD')
-    				this.message[3] = args.TEXT;
+    				this.message[3] = value;
     		else
-    				this.message[4] = args.TEXT;
-    	
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    				this.message[4] = value;
     }
     
     move (args){
-    		var value = args.TEXT;
+    		var value = Number(args.TEXT);
     		if(args.FRONTBACK == '\uB4A4')
     				value *= -1;
-
-				this.moveID = (this.moveID+1)%16;
+				value = value>1000?1000 : value<-1000? -1000 : value;
+				
+				this.moveID = (this.moveID<14)? this.moveID+1 : 1;
 				value = value&0xFFF;
     	  value |= (this.moveID<<12);
     	  
     	  this.message[6] = (value>>8);
     	  this.message[5] = value&0xFF;
-    	  
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     rotate (args){
-    		var value = args.TEXT;
+    		var value = Number(args.TEXT);
     		if(args.ROTDIR == '\uBC18\uC2DC\uACC4\uBC29\uD5A5')
     				value *= -1;
-
-				this.rotID = (this.rotID+1)%16;
+				value = value>1000?1000 : value<-1000? -1000 : value;
+				this.rotID = (this.rotID<14)? this.rotID+1 : 1;
 				value = value&0xFFF;
     	  value |= (this.rotID<<12);
     	  
     	  this.message[8] = (value>>8);
     	  this.message[7] = value&0xFF;
-    	  
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     servo (args){
+    		var value = Number(args.TEXT);
+    		value = value>90?90 : value<-90? -90 : value;
     		if(args.ONETWO == '1\uBC88')
-    				this.message[9] = args.TEXT;
+    				this.message[9] = value;
     		else
-    				this.message[10] = args.TEXT;
-    	
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    				this.message[10] = value;
     }
     
     irsensor (args){
@@ -553,12 +535,6 @@ class Scratch3UglyBotBlocks {
 		    		else
 		    				this.message[11] &= ~0x04;
     		}
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     
@@ -585,24 +561,28 @@ class Scratch3UglyBotBlocks {
     }
     
     getjoystic(args){
-    	var rxData = this._peripheral.rxData;
-    	if(args.FBLR == '\uC55E\uB4A4')
-    		return rxData[5];
-    	else
-    		return rxData[6];
+	    	var rxData = this._peripheral.rxData;
+	    	if(args.FBLR == '\uC55E\uB4A4')
+		    		return rxData[5]>127? rxData[5]-256 : rxData[5];
+	    	else{
+	    			if(rxData[11] == 4)
+		    				return rxData[6];
+		    		else
+	    				return rxData[6]>127? rxData[6]-256 : rxData[6];
+	    	}
     }
     
     gettilt(args){
     	var rxData = this._peripheral.rxData;
     	if(args.FBLR == '\uC55E\uB4A4')
-    		return rxData[7];
+    		return rxData[7]>127? rxData[7]-256 : rxData[7];
     	else
-    		return rxData[8];
+    		return rxData[8]>127? rxData[8]-256 : rxData[8];
     }
     
     getsound(){
     	var rxData = this._peripheral.rxData;
-    	return rxData[9];
+    	return rxData[9]>127? rxData[9]-256 : rxData[9];
     }
     
     getillum(){

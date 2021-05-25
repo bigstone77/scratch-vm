@@ -37,12 +37,17 @@ class JDCode {
         this.reset = this.reset.bind(this);
         this._onConnect = this._onConnect.bind(this);
         this._onMessage = this._onMessage.bind(this);
+        this._pollValues = this._pollValues.bind(this);
         this.rxData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.txData = new Int16Array(7);
         this.txArray = new Uint8Array(14);
+        this._pollingIntervalID = null;
+        this._pollingInterval = 25;
         this.moveX = 0;
         this.moveY = 0;
-        this.rotation = 0;
+        this.rotation = 0;    
+        this.isFlying = 0;    
+        this.armDisableCnt=0;
         this._sensors = {
             button: 0,
             ir: [0, 0, 0],
@@ -52,19 +57,19 @@ class JDCode {
             sound: 0,
             illum:0
         };
-        this.txData[5] = 100;
-        this.txData[6] = 100;
+        this.stopAll();
     }
     
 		stopAll () {
 				for (let i = 0; i < 7; i++)
 						this.txData[i] = 0;
+				this.txData[4] = 0x01;
 				this.txData[5] = 100;
 	      this.txData[6] = 100;		
-				this.send(this.txData);
 				this.moveX = 0;
 	      this.moveY = 0;
 	      this.rotation = 0;
+	      this.isFlying = 0;
 		}
 		
     scan () {
@@ -92,6 +97,7 @@ class JDCode {
     }
 
     reset () {
+    		console.log("reset");
         if (this._timeoutID) {
             window.clearTimeout(this._timeoutID);
             this._timeoutID = null;
@@ -107,22 +113,9 @@ class JDCode {
         return connected;
     }
 
-    send (message) {
-        if (!this.isConnected()) return;
-				for(let n=0;n<7;n++){
-				    this.txArray[n*2] = message[n]&0xFF;
-				    this.txArray[n*2+1] = (message[n]>>8)&0xFF;
-				}
-				//console.log(this.txArray);
-        this._ble.write(BLEUUID.service, BLEUUID.txChar, this.txArray, 'ASCII', true).then(
-            () => {
-                this._busy = false;
-                window.clearTimeout(this._busyTimeoutID);
-            }
-        );
-    }
 
     _onConnect () {
+    		this._pollingIntervalID = window.setInterval(this._pollValues, this._pollingInterval);
         this._ble.read(BLEUUID.service, BLEUUID.rxChar, true, this._onMessage);
         this._timeoutID = window.setTimeout(
             () => this._ble.handleDisconnectError(BLEDataStoppedError),
@@ -130,8 +123,37 @@ class JDCode {
         );
     }
 
+		_pollValues () {
+    		if (!this.isConnected()) {
+            window.clearInterval(this._pollingIntervalID);
+            return;
+        }
+        if(this.armDisableCnt>0){
+        		this.armDisableCnt -= 1;
+        		if(this.armDisableCnt==0)
+        				this.txData[4] = 1;
+        }
+
+				for(let n=0;n<7;n++){
+				    this.txArray[n*2] = this.txData[n]&0xFF;
+				    this.txArray[n*2+1] = (this.txData[n]>>8)&0xFF;
+				}
+        this._ble.write(BLEUUID.service, BLEUUID.txChar, this.txArray, 'ASCII', true).then(
+            () => {
+                this._busy = false;
+                window.clearTimeout(this._busyTimeoutID);
+            }
+        );
+     }
+
     _onMessage (strData) {
       	this.rxData = strData.split(',');
+      	if(this.isFlying && (this.rxData[0]&0x01)){
+      			this.stopAll();
+      			this.txData[4] = 0;
+      			this.isFlying = 0;
+      			this.armDisableCnt=5;
+      	}
         window.clearTimeout(this._timeoutID);
         this._timeoutID = window.setTimeout(
             () => this._ble.handleDisconnectError(BLEDataStoppedError),
@@ -197,8 +219,8 @@ class Scratch3JDCodeBlocks {
                     blockType: BlockType.COMMAND,
                     arguments: {
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '70'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 100
                         }
                     }
                 },
@@ -217,8 +239,8 @@ class Scratch3JDCodeBlocks {
                             defaultValue: '\uC55E'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '70'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 70
                         }
                     }
                 },
@@ -237,12 +259,12 @@ class Scratch3JDCodeBlocks {
                             defaultValue: '\uC55E'
                         },
                         TEXT1: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '100'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 100
                         },
                         TEXT2: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '70'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 100
                         }
                     }
                 },
@@ -261,12 +283,12 @@ class Scratch3JDCodeBlocks {
                             defaultValue: '\uC2DC\uACC4\uBC29\uD5A5'
                         },
                         TEXT1: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '90'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 90
                         },
                         TEXT2: {
                             type: ArgumentType.STRING,
-                            defaultValue: '70'
+                            defaultValue: 70
                         }
                     }
                 },
@@ -279,8 +301,8 @@ class Scratch3JDCodeBlocks {
                     blockType: BlockType.COMMAND,
                     arguments: {
                        	TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -298,8 +320,8 @@ class Scratch3JDCodeBlocks {
                             defaultValue: '\uC67C\uCABD\uC544\uB798'
                         },
                         TEXT: {
-                            type: ArgumentType.STRING,
-                            defaultValue: '0'
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
                         }
                     }
                 },
@@ -387,119 +409,82 @@ class Scratch3JDCodeBlocks {
             }
         };
     }
+    
     takeoff () {
+    		if(this.getready()==0)
+    				return;
+    		this._peripheral.stopAll();
     		this.message[3] = 70;
     		this.message[4] = 0x2F;
-		    this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    		this._peripheral.isFlying = 1;
     }
+    
     landing () {
     		this.message[3] = 0x0;
-		    this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+    		this._peripheral.isFlying = 0;
     }
     
     alt(args){
-    		var value = args.TEXT>150? 150 : args.Text<0? 0 : args.TEXT;
+    		if(this._peripheral.isFlying==0)
+    				return;
+    		var value = args.TEXT>150? 150 : args.TEXT<0? 0 : Number(args.TEXT);
     		this.message[3] = value;
-		    this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     velocity(args){
-    		var vel = args.TEXT>200? 200 : args.TEXT<0? 0 : args.TEXT; 
+    	  if(this._peripheral.isFlying==0)
+    				return;
+    		var vel = args.TEXT>200? 200 : args.TEXT<0? 0 : Number(args.TEXT);
     		if(args.FBRL == '\uC55E') this.message[1] = vel;
 				if(args.FBRL == '\uB4A4') this.message[1] = vel*-1;
     		if(args.FBRL == '\uC624\uB978\uCABD') this.message[0] = vel;
 				if(args.FBRL == '\uC67C\uCABD') this.message[0] = vel*-1;
-				this.message[4] = 0x0F;
-				
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
+				this.message[4] &= ~0x20;
     }
     
     move (args){
-    		var dist = args.TEXT1>2000? 2000 : args.TEXT1<0? 0 : args.TEXT1; 
-    		var vel = args.TEXT2>200? 200 : args.TEXT2<0? 0 : args.TEXT2; 
-    		if(args.FBRL == '\uC55E') this._peripheral.moveY += dist; //this.message[1] = dist;
-				if(args.FBRL == '\uB4A4') this._peripheral.moveY += (-1*dist); //this.message[1] = dist*-1;
-    		if(args.FBRL == '\uC624\uB978\uCABD') this._peripheral.moveX += dist; //this.message[0] = dist;
-				if(args.FBRL == '\uC67C\uCABD') this._peripheral.moveX += (-1*dist); //this.message[0] = dist*-1;
+    		if(this._peripheral.isFlying==0)
+    				return;
+    		var dist = args.TEXT1>2000? 2000 : args.TEXT1<0? 0 : Number(args.TEXT1); 
+    		var vel = args.TEXT2>200? 200 : args.TEXT2<0? 0 : Number(args.TEXT2); 
+    		if(args.FBRL == '\uC55E') this._peripheral.moveY += dist; 
+				if(args.FBRL == '\uB4A4') this._peripheral.moveY += (-1*dist); 
+    		if(args.FBRL == '\uC624\uB978\uCABD') this._peripheral.moveX += dist; 
+				if(args.FBRL == '\uC67C\uCABD') this._peripheral.moveX += (-1*dist);
 				this.message[0] = this._peripheral.moveX;
 				this.message[1] = this._peripheral.moveY;
-				this.message[4] = 0x2F;
+				this.message[4] |= 0x20;
     	  this.message[5] = vel;
-    	  
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     rotation (args){
-    		var degree = args.TEXT1>179? 179 : args.TEXT1<0? 0 : args.TEXT1; 
-    		var vel = args.TEXT2>200? 200 : args.TEXT2<0? 0 : args.TEXT2; 
-    		if(args.ROTDIR == '\uC2DC\uACC4\uBC29\uD5A5') this._peripheral.rotation += degree; //this.message[2] = degree;
-				else this.message[2] = this._peripheral.rotation += (-1*degree); //degree*-1;
+    		if(this._peripheral.isFlying==0)
+    				return;    	
+    		var degree = args.TEXT1>179? 179 : args.TEXT1<0? 0 : Number(args.TEXT1);
+    		var vel = args.TEXT2>200? 200 : args.TEXT2<0? 0 : Number(args.TEXT2); 
+    		if(args.ROTDIR == '\uC2DC\uACC4\uBC29\uD5A5') this._peripheral.rotation += degree; 
+				else this.message[2] = this._peripheral.rotation += (-1*degree); 
 				this.message[2] = this._peripheral.rotation;	
     	  this.message[6] = vel;
-    	  
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     proprot (args){
-    		var speed = args.TEXT>1000? 1000 : args.TEXT<0? 0 : args.TEXT; 
+    		var speed = args.TEXT>100? 1000 : args.TEXT<0? 0 : Number(args.TEXT)*10;
     		this.message[3] = speed;
 				this.message[4] = 0x01;
-    	  
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
 
     motorot (args){
-    		var speed = args.TEXT>100? 100 : args.TEXT<0? 0 : args.TEXT; 
+    		var speed = args.TEXT>100? 100 : args.TEXT<0? 0 : Number(args.TEXT);
     		if(args.LTRB == '\uC67C\uCABD\uC544\uB798') this.message[2] = speed;
 				if(args.LTRB == '\uC67C\uCABD\uC704') this.message[1] = speed;
 				if(args.LTRB == '\uC624\uB978\uCABD\uC544\uB798') this.message[3] = speed;
 				if(args.LTRB == '\uC624\uB978\uCABD\uC704') this.message[0] = speed;
 				this.message[4] = 0x8000;
-				
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
     emergency (args){
+    		this._peripheral.isFlying=0;
     		this._peripheral.moveX = 0;
     		this._peripheral.moveY = 0;
     		this._peripheral.rotation = 0;
@@ -507,19 +492,12 @@ class Scratch3JDCodeBlocks {
 						this.message[i] = 0;
 				this.message[5] = 100;
       	this.message[6] = 100;		
-    		
-    		this._peripheral.send(this.message);
-				return new Promise(resolve => {
-		        setTimeout(() => {
-		            resolve();
-		        }, BLESendInterval);
-	      });
     }
     
 
     getready(){
 	    	var rxData = this._peripheral.rxData;
-	    	if((rxData[0]&0x02) == 0)
+	    	if((rxData[0]&0x03) == 0)
 	    			return 1;
 	    	else
 	    			return 0;
