@@ -22,6 +22,7 @@ const builtinExtensions = {
     uglybot: () => require('../extensions/scratch3_uglybot'),
     tm2scratch: () => require('../extensions/scratch3_tm2scratch'),
     facemesh2scratch: () => require('../extensions/scratch3_facemesh2scratch'),
+    posenet2scratch: () => require('../extensions/scratch3_posenet2scratch'),
     text2speech: () => require('../extensions/scratch3_text2speech'),
     translate: () => require('../extensions/scratch3_translate'),
     videoSensing: () => require('../extensions/scratch3_video_sensing'),

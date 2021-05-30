@@ -40,7 +40,7 @@ const Message = {
     'en': 'off'
   },
   video_on_flipped: {
-		'ko': '대칭화면',
+    'ko': '좌우 반전',
     'en': 'on flipped',
   },
   please_wait: {
