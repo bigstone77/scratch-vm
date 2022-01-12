@@ -19,6 +19,7 @@ const builtinExtensions = {
     microbit: () => require('../extensions/scratch3_microbit'),
     jdcode: () => require('../extensions/scratch3_jdcode'),
     firmtech: () => require('../extensions/scratch3_firmtech'),
+    aicobot: () => require('../extensions/scratch3_aicobot'),
     jcboard: () => require('../extensions/scratch3_jcboard'),
     uglybot: () => require('../extensions/scratch3_uglybot'),
     tm2scratch: () => require('../extensions/scratch3_tm2scratch'),
